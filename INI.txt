@@ -1,0 +1,449 @@
+#-------------------------------------------------------------INI Project------------------------------------------------------------------------
+#Project Introduction
+    #It is a INI files operator to implement create, read, update and delete function, also this desktop application connect with ArcGIS. 
+    #It helps user choose layers or fieldnames more easier.
+
+#Project improvements
+    # 1.Add INI files path and mxd files pathas as an Entry in the first page of this application, 
+    # users can type in their path to run this application and do CRUD operations
+
+#Area requiring attention
+    # 1. add or create new pair before change the value in every entry, or what you changed in entry will be reset after creation or delete
+    # 2. You can edit copy file, and it will be replace when you save it.
+    # 3. There may have duplicated sections or key names, if second page do not show, please check the INI file manually
+    # 4. key value pair in each section are placed out of order, need to change the data structure if sequence are matters 
+#------------------------------------------------------------------------------------------------------------------------------------------------
+
+from tkinter import *
+from configparser import ConfigParser
+import os
+from tkinter import messagebox
+from tkinter.ttk import Combobox
+from PIL import ImageTk, Image
+import arcpy
+from os.path import exists
+
+#Set global database for rendering
+database = {}
+#Initiate target Path
+save_path = ''
+# mxd saving path, you have to change it to your own path
+# Add as many mxd folders as you have
+mxd = "D:\\Sample Data\\"
+mxd_list = []
+mxd_Alliant = mxd + "ALLIANT\\ALLIANT.mxd"
+mxd_Chevron = mxd + "CHEVRON\\Chevron.mxd"
+mxd_OCENSA = mxd + "OCENSA\\Ocensa_PODS.mxd"
+mxd_PGE=mxd + "PGE\\PGE.mxd"
+mdx_PGE_Demo=mxd + "PGE_Demo\\PGE_Demo.mxd"
+mxd_SEMCO = mxd +  "SEMCO\\Semco.mxd"
+mxd_list.append(mxd_Alliant)
+mxd_list.append(mxd_Chevron)
+mxd_list.append(mxd_OCENSA)
+mxd_list.append(mxd_PGE)
+mxd_list.append(mdx_PGE_Demo)
+mxd_list.append(mxd_SEMCO)
+
+# Initiate dataframe as globle variable
+df = []
+# Initiate map documents from ArcGIS as globle variable
+mxd2 = []
+
+#Filter two folders into two sections and save in its own list
+def get_HCA_list():
+    hca_list_name = []
+    for i in range(len(os.listdir(path))):
+        if "HCAMgr_Synergi" in os.listdir(path)[i]:
+            index = os.listdir(path)[i].index("SOE") + 5
+            leng = len(os.listdir(path)[i]) - 4
+            name = os.listdir(path)[i][index: leng]
+            hca_list_name.append(name)
+    return hca_list_name
+
+def get_qurey_list():
+    qurey_list_name = []
+    for i in range(len(os.listdir(path))):
+        if "ESRIQueryMgr_Synergi" in os.listdir(path)[i]:
+            index = os.listdir(path)[i].index("SOE") + 5
+            leng = len(os.listdir(path)[i]) - 4
+            name = os.listdir(path)[i][index: leng]
+            qurey_list_name.append(name)
+    return qurey_list_name
+
+#Transfer from INI file to Json code
+def ini_index_page(name):
+    fileAddress = path + "\\" + name
+    cfg = ConfigParser()
+
+    #There might get error because of duplicated section name or key name, please check INI files manually
+    cfg.read(fileAddress)
+    # dest the generated JSON database from INI file
+    dest = {}
+    for sect in cfg.sections():
+        dest[sect] = dict(cfg.items(sect))
+    return dest
+
+# filename needs to be processed to get same mxd file if the filename end with "_copy"
+def filename_process(filename):
+    try:
+        filename.index('copy')
+        return filename[:len(filename) - 5]
+    except:
+        return filename
+
+#Get complete file name from the local folder
+def get_file(tilename, filename):
+    for i in range(len(os.listdir(path))):
+        if tilename in os.listdir(path)[i] and filename in os.listdir(path)[i]:
+            return(os.listdir(path)[i])
+
+# Jump from file page to main page and reset file path
+def jump_to_main():
+    set_section()
+    for widget in file_page.winfo_children():
+        widget.destroy()
+    file_page.pack_forget()
+    main_page.pack(fill="both",expand=True)
+
+# Filter the layers names where have numbers
+def has_numbers(inputString):
+    for char in inputString:
+        if char == '(':
+            return False
+    return True
+
+'''----------------------------------------------------------Main Page--------------------------------------------------'''
+#Main Page Frame
+window = Tk()
+window.title('INI Reading Project')
+window.config(padx=20,pady=20)
+main_page = Frame(window)
+main_page.pack()
+
+file_page = Frame(window)
+departments = ('HCAMgr_Synergi_SOEs','QueryMgr_Synergi_SOEs')
+configur = ConfigParser()
+
+#The INI files location, need to be changed to your desired path
+path = "\\\\ume7001\\UME_Common\\Common\\Weixin\\INI GUI\\INI Files_test"
+
+page1_canvas1 = Canvas(main_page,width=600, height=40, bg = '#33B2E1')
+script_dir = os.path.dirname(os.path.abspath(__file__))
+page1_image = Image.open(os.path.join(script_dir, 'DNV logo.png'))
+page1_new_img = page1_image.resize((100,50))
+page1_img_title = ImageTk.PhotoImage(page1_new_img)
+page1_canvas1.create_image(45,20, image = page1_img_title)
+page1_canvas1.grid(row = 0, column = 0)
+
+page1_canvas2 = Canvas(main_page,width=500, height=200)
+page1_canvas2.grid(row = 3, column=0)
+Font_tuple = ("Times New Roman", 20, "bold")
+
+page1_lab_title = Label(page1_canvas2,text="INI Editor",font = Font_tuple)
+page1_labComb = Label(page1_canvas2, text="Sections:",font=("Times New Roman", 12, "bold"))
+page1_canvas2.create_window(250,30, window=page1_lab_title)
+page1_canvas2.create_window(40,80, window = page1_labComb)
+
+# Classified INI files into two sections
+section1 = get_HCA_list()
+section2 = get_qurey_list()
+
+# Get respective dropdown menus from each section
+def set_section():
+    if option.get() == "HCAMgr_Synergi_SOEs":
+        file_name["values"] = get_HCA_list()
+    else:
+        file_name["values"] = get_qurey_list()
+
+option = StringVar()
+option.set(None)
+radiobutton1 = Radiobutton(page1_canvas2,text="HCAMgr_Synergi_SOEs",value="HCAMgr_Synergi_SOEs", variable=option, font=("Times New Roman", 10), command = set_section)
+radiobutton2 = Radiobutton(page1_canvas2,text="QueryMgr_Synergi_SOEs",value="QueryMgr_Synergi_SOEs", variable=option, font= ("Times New Roman", 10), command = set_section)
+page1_canvas2.create_window(180,80, window = radiobutton1)
+page1_canvas2.create_window(380,80, window = radiobutton2)
+
+lb_cmbox = Label(page1_canvas2,text="Files list:", font=("Times New Roman", 12, "bold"))
+page1_canvas2.create_window(40, 120, window=lb_cmbox)
+
+selected_file = StringVar()
+file_name = Combobox(page1_canvas2, textvariable = selected_file,width=60)
+
+page1_canvas2.create_window(280, 120,window=file_name)
+
+
+#--------------------------------------------------------File Page and its functions---------------------------------------------------------------
+# Finaldatabase is for saving all the changed in the file page, it will return and saved as new copy file
+final_database = {}
+# The left entry value in file page
+entrys_left = []
+# The right entry value in file page
+entrys_right = []
+
+# For create a new key value pair in second page
+def popupwindow(p):
+    global popup
+    popup = Toplevel()
+    popup.columnconfigure(0,weight=1)
+    popup.columnconfigure(1,weight=3)
+    popup.grab_set()
+    popup.geometry("240x100")
+    popup.title("Create New Item")
+
+    create_new_key = Label(popup, text="Key:")
+    create_new_key.grid(column=0, row=0, sticky=W, padx=5, pady=5)
+
+    global create_new_key_enter
+    create_new_key_enter = Entry(popup)
+    create_new_key_enter.grid(column=1, row=0, sticky=E, padx=5, pady=5)
+
+    create_new_value = Label(popup,text="Value:")
+    create_new_value.grid(column=0, row=1, sticky=W, padx=5, pady=5)
+    
+    global create_new_value_entry
+    create_new_value_entry = Entry(popup)
+    create_new_value_entry.grid(column=1, row=1, sticky=E, padx=5, pady=5)
+
+    Button(popup,text='Create',command=lambda w = p:popup_window_button(w)).grid(column=1, row=3, sticky=E, padx=5, pady=5)
+    popup.mainloop()
+
+# judgment statment for return button
+def return_button():
+    result = messagebox.askyesnocancel("Back to main page","Want to save your changes?")
+    if result is True:
+        update_button_function()
+        jump_to_main()
+    elif result is False:
+        jump_to_main()
+        global database
+        database = {}
+    else:
+        pass
+
+# jump to file page from what has chose from first page
+def jump_to_file_data():
+    if selected_file.get() == "":
+        messagebox.showwarning("Warning","Please choose a file")
+    else:
+        file_page.pack(fill=BOTH, expand=1)
+        main_page.pack_forget()
+
+        #Canvas for Image
+        page2_canvas1 = Canvas(file_page, width = 600,height=40, bg = '#33B2E1')
+
+        #Head part:image
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        page2_image = Image.open(os.path.join(script_dir, 'DNV logo.png'))
+
+        #Resize image and fill in the gird
+        page2_new_img = page2_image.resize((100,50))
+        img_title2 = ImageTk.PhotoImage(page2_new_img)
+        page2_canvas1.create_image(45,20, image = img_title2)
+        page2_canvas1.grid(row=0, column=0)
+
+        #Canvas for Section and title name
+        page2_canvas2 = Canvas(file_page,width = 600,height=90)
+        page2_canvas2.grid(row = 1,column=0)
+        papge2_Font_tuple = ("Times New Roman", 20, "bold")
+
+        page2_lab_title = Label(page2_canvas2,text="INI Editor",font = papge2_Font_tuple)
+        page2_labComb = Label(page2_canvas2, text="Sections:",font=("Times New Roman", 12, "bold"),anchor=W)
+        page2_back_button = Button(page2_canvas2, text="Back",width=10,command=return_button)
+
+        page2_canvas2.create_window(300,30, window=page2_lab_title)
+        page2_canvas2.create_window(100,80, window =page2_labComb)
+        page2_canvas2.create_window(45,30, window =page2_back_button)
+
+        #A frame with scrollbar to control the content
+        font_content_frame = Frame(file_page,highlightbackground='black',width=600,highlightthickness=1)
+        font_content_frame.grid(row=2, column=0)
+
+        #canvas for conent
+        global fontcanvas
+        fontcanvas = Canvas(font_content_frame,width= 550)
+        fontcanvas.pack(side=LEFT, fill=BOTH, expand =TRUE,padx=10,pady=10)
+        content_y_scrol = Scrollbar(font_content_frame, orient=VERTICAL, command= fontcanvas.yview)
+        fontcanvas['yscrollcommand'] = content_y_scrol.set
+        content_y_scrol.pack(side=RIGHT, fill=Y)
+        #Scrollbar for content
+        fontcanvas.configure(yscrollcommand=content_y_scrol.set)
+        fontcanvas.bind("<Configure>",lambda e: fontcanvas.config(scrollregion=fontcanvas.bbox(ALL)))
+
+        update_button = Button(file_page, text="Update and Save",width=20,command=update_button_function)
+        update_button.grid(row=3, column=0)
+    
+        #Set values for file page
+        if option.get() == "HCAMgr_Synergi_SOEs":
+            page2_lab_title.config(text="HCAMgr_Synergi_SOEs")
+        else:
+            page2_lab_title.config(text="QueryMgr_Synergi_SOEs")
+        page2_labComb.config(text= selected_file.get())
+
+        file_name = get_file(option.get(), selected_file.get())
+        global database
+        # The Database of what we choose from dropdown meanu and redio button
+        database =  ini_index_page(file_name)
+        #Get drop down name from ArcMap
+        mxd_namelist = []
+        for index in range(len(mxd_list)):
+            if filename_process(selected_file.get()) in mxd_list[index]:
+                mxd = arcpy.mapping.MapDocument(mxd_list[index])  
+                for lyr in arcpy.mapping.ListLayers(mxd):
+                    if has_numbers(str(lyr.name)):
+                        mxd_namelist.append(str(lyr.name))
+        #fetching the data from ArcMap
+        field_name_list = []
+        layersources = {}
+        global df
+        global mxd2
+        for index in range(len(mxd_list)):
+            if filename_process(selected_file.get()) in mxd_list[index]:
+                mxd2 = arcpy.mapping.MapDocument(mxd_list[index]) 
+                df = arcpy.mapping.ListDataFrames(mxd2)
+        
+        newlayer = []
+        for d in df:
+            # lists all available layers
+            layers = arcpy.mapping.ListLayers(mxd2, "", d) 
+            index = 0
+            for lyr in layers:
+                if has_numbers(str(lyr.name)):
+                    newlayer.append(lyr)
+        for lyr in newlayer:
+            # fills keys and values of the layers (names and sources) into the dictionary
+            layersources[lyr.name] = lyr.dataSource 
+            selecteditem = layersources[lyr.name] 
+            # creates a list with all the fields from that layer
+            fields = arcpy.ListFields(selecteditem)
+            # iterates through the list of fields
+            for field in fields:
+                field_name_list.append(str(field.name))
+
+    #Recursion begin from here, the window will refresh whenever delete or create pair
+    global recursion
+    def recursion():
+        global database
+        line_column = 20
+        section_index = 0
+        #key is the section head name
+        for key,value in database.items():
+            line_column +=80
+            section_index +=1
+            fontcanvas.create_text(0, line_column,text = key + ":", font=("Times New Roman", 12, "bold"),anchor=W)
+
+            #index is the key   
+            # value[index] is the value 
+            #small_dic is for saving all the key value Entry
+            small_dic = {}
+            for index in value:
+                global key_entry
+                key_entry = Entry(fontcanvas,width=30,font=("Times New Roman", 10))
+                key_entry.insert(0,index)
+                fontcanvas.create_window(80,line_column + 30,window=key_entry)
+                entrys_left.append(key_entry)
+
+                global value_entry
+                global value_dropdown
+                # classify key name to Entry and Dropdown menu
+                if "field" in index or "filter" in index:
+                    global name_dropdown
+                    name_dropdown = Combobox(fontcanvas,width=32)
+                    name_dropdown['values'] = field_name_list
+                    if value[index] != "":
+                        # The Entry will show the name if the value is in namelist
+                        if str(value[index]) in field_name_list:
+                            name_dropdown.set(str(value[index]))
+                    fontcanvas.create_window(320,line_column + 30, window=name_dropdown)
+                    # Save left Entry and right combobox to dictionary
+                    small_dic[key_entry] = name_dropdown
+                elif "tbl" in index:
+                    global value_dropdown
+                    value_dropdown = Combobox(fontcanvas,width=32)
+                    value_dropdown['values'] = mxd_namelist
+                    if value[index] != "":
+                        if str(value[index]) in mxd_namelist:
+                            value_dropdown.set(str(value[index]))
+                    fontcanvas.create_window(320,line_column + 30, window=value_dropdown)
+                    small_dic[key_entry] = value_dropdown
+                else:
+                    value_entry = Entry(fontcanvas,width=35,font=("Times New Roman", 10))
+                    value_entry.insert(0, value[index])
+                    fontcanvas.create_window(320,line_column + 30, window=value_entry)
+                    entrys_right.append(value_entry)
+                    small_dic[key_entry] = value_entry
+                delete_butotn = Button(fontcanvas, text="Delete", width=8,command=lambda m=index: delete_button_function(m))
+                fontcanvas.create_window(480,line_column + 30,window= delete_butotn)
+                line_column += 30
+
+            create_button = Button(fontcanvas, text="Create",width=10,command=lambda p = (section_index,database):popupwindow(p))
+            fontcanvas.create_window(25, line_column+ 30, window=create_button)
+            final_database[key] = small_dic
+    # Run it for the first time
+    recursion()
+    
+#Delete button for one item in a section
+def delete_button_function(m):
+    global database
+    for key,value in database.items():
+    #key is the head
+    #index is the left value
+        for index in value.copy():
+            if index == m:
+                del value[index]
+                break
+    fontcanvas.delete('all')
+    recursion()
+
+# Create new key value pair and add to database
+def popup_window_button(p):
+    section_index = 0
+    for key, value in p[1].items():
+        section_index+=1
+        if section_index == p[0]:
+            value[create_new_key_enter.get()] = create_new_value_entry.get()
+    fontcanvas.delete('all')
+    
+    recursion()
+    popup.destroy() 
+    messagebox.showinfo(None,"Successfully Added")
+
+#Save changed data to INI file
+def update_button_function():
+    for key, value in final_database.items():
+        for pair in value.copy():
+            if type(value[pair]) !=str and type(pair) != str:
+                value[pair] = value[pair].get()
+                pair = pair.get()
+    database = final_database.copy()
+    fileAddress = path + "\\" + get_file(option.get(), selected_file.get())
+    cfg = ConfigParser()
+    cfg.read(fileAddress)
+    
+    # clear the INI file content in case of duplication
+    for each_section in cfg.sections():
+        cfg.remove_section(each_section)
+
+    # iterate database and save to INI file
+    for section in database:
+        cfg.add_section(section)
+        for key, value in database[section].items():
+            cfg.set(str(section),key.get(),value)
+            
+    global save_path
+    # Create saving path, new copy will be replaced
+    if 'copy' in save_path:
+        save_path = fileAddress[: len(fileAddress) - 9] + '_copy.ini'
+    else:
+        save_path = fileAddress[: len(fileAddress) - 4] + "_copy.ini"
+    
+    fp = open(save_path,'w')
+    cfg.write(fp)
+    fp.close
+    messagebox.showinfo(None,"Successfully updated")
+
+#Button for close the window
+button1 = Button(text="Submit",width=20,font=("Times New Roman", 10),command=jump_to_file_data)
+button2 = Button(text = "Exit",width=20,font=("Times New Roman", 10),command=window.destroy)
+page1_canvas2.create_window(165,160,window=button1)
+page1_canvas2.create_window(400,160,window=button2)
+
+window.mainloop()
