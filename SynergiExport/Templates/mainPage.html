@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synergi Pipeline</title>
+    <title>Homepage</title>
+    <link rel="stylesheet" href="../static/style.css">
+    <script type="text/javascript">// <![CDATA[
+        function loading(){
+            $("#loading").show();
+            $("main").hide();       
+        }
+    // ]]></script>
+</head>
+<body>
+    <header>
+        <img src="../static/DNV logo.png" alt="">
+    </header>
+    <main>
+        <h1>Synergi Pipeline Exporter</h1>
+        <form method="post" action="/forward">
+            <label>
+                <span>Username:</span>
+                <input type="text" name = "UserName" placeholder="Please input username" required>
+            </label>
+            <label>
+                <span>Password:</span>
+                <input type="password" name = "Password" placeholder="Please input password" required>
+            </label>
+            <label class="script">
+                <span>Synergi base URL:</span>
+                <input type="text" name = "script" placeholder="Please input complete URL" required>
+            </label>
+            <h5>Example: http://prj-csu.dnvgl.com</h5>
+            <label class="savingPath">
+                <span>Common folder:</span>
+                <input type="text" name = "SavingPath" placeholder="Just input your name" required>                
+            </label>
+            <h5>will be saved in \\ume7001\UME_Common\Common\{Folder name}</h5>
+            <button type="submit" value="submit" class="button" onclick="this.classList.toggle('button--loading')"><span class="button__text">Save</span></button>
+            {% if result %}
+                {% if status == 1 %}
+                    <p style="color: blue">{{result}}</p>
+                {% endif %}
+                {% if status == 2 %}
+                    <p style="color: red">{{result}}</p>
+                {% endif %}
+                {% if status == 3 %}
+                    <p style="color: red">{{result}}</p>
+                {% endif %}
+                {% if status == 4 %}
+                    <p style="color: red">{{result}}</p>
+                {% endif %}
+                {% if status == 5 %}
+                    <p style="color: red">{{result}}</p>
+                {% endif %}
+            {% endif %}
+        </form>
+       
+    </main>
+    
+</body>
+
+</html>
